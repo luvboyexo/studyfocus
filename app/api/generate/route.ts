@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
-import { ai } from "../../../lib/gemini";
+import { ai } from "@/lib/gemini";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
-  try {
-    const { subject, difficulty } = await req.json();
+  const { subject, difficulty } = await req.json();
 
+  // tenta buscar algo salvo antes
+  const cached = await prisma.generation.findFirst({
+    where: {
+      subject,
+      difficulty,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  try {
     const prompt = `
 Você é um professor especialista.
 
@@ -29,10 +41,7 @@ Retorne APENAS um JSON válido, sem markdown, sem texto extra, no formato:
     });
 
     const text = response.text?.trim();
-
-    if (!text) {
-      throw new Error("Empty AI response");
-    }
+    if (!text) throw new Error("Empty AI response");
 
     const cleaned = text
       .replace(/```json/g, "")
@@ -41,9 +50,23 @@ Retorne APENAS um JSON válido, sem markdown, sem texto extra, no formato:
 
     const parsed = JSON.parse(cleaned);
 
+    // salvou? então agora o sistema fica mais forte
+    await prisma.generation.create({
+      data: {
+        subject,
+        difficulty,
+        content: parsed,
+      },
+    });
+
     return NextResponse.json(parsed);
   } catch (error) {
-    console.error("API error:", error);
+    console.error("AI error:", error);
+
+    // fallback: devolve algo do banco
+    if (cached) {
+      return NextResponse.json(cached.content);
+    }
 
     return NextResponse.json(
       { error: "Failed to generate study plan" },
