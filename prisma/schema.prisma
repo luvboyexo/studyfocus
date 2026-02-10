@@ -16,10 +16,13 @@ model Generation {
   id         String   @id @default(uuid())
   subject    String
   difficulty String
+  topicKey   String
   content    Json
   createdAt  DateTime @default(now())
 
+  @@unique([subject, difficulty, topicKey])
   @@index([subject, difficulty])
 }
+
 
 

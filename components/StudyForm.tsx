@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-/* UI */
+/* ui */
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -13,14 +13,15 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-/* Icons */
-import { PlayCircle, CheckCircle2, ListTodo } from "lucide-react";
+/* icons */
+import { PlayCircle, CheckCircle2, ListTodo, WifiOff } from "lucide-react";
 
-/* Local */
+/* local */
 import { Spinner } from "@/components/Spinner";
 
-/* Types */
+/* types */
 interface StudyData {
   topic: string;
   explanation: string;
@@ -29,7 +30,12 @@ interface StudyData {
   exercises: string[];
 }
 
-/* Data */
+interface ApiResponse extends StudyData {
+  mode?: "ai" | "fallback";
+  warning?: string;
+}
+
+/* data */
 const subjects = [
   "Matemática",
   "Biologia",
@@ -48,12 +54,16 @@ export function StudyForm() {
   const [subject, setSubject] = useState(subjects[0]);
   const [difficulty, setDifficulty] = useState(difs[0]);
   const [data, setData] = useState<StudyData | null>(null);
+  const [mode, setMode] = useState<"ai" | "fallback" | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setData(null);
+    setMode(null);
+    setWarning(null);
 
     try {
       const res = await fetch("/api/generate", {
@@ -65,10 +75,10 @@ export function StudyForm() {
       });
 
       if (!res.ok) {
-        throw new Error("Request failed");
+        throw new Error("request failed");
       }
 
-      const json = await res.json();
+      const json: ApiResponse = await res.json();
 
       const normalizedData: StudyData = {
         topic: json.topic ?? "",
@@ -81,6 +91,8 @@ export function StudyForm() {
       };
 
       setData(normalizedData);
+      setMode(json.mode ?? null);
+      setWarning(json.warning ?? null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -89,10 +101,12 @@ export function StudyForm() {
   }
 
   return (
-    <div className="w-full max-w-3xl space-y-8">
-      <Card>
+    <div className="w-full max-w-3xl space-y-10">
+      <Card className="border-muted/60">
         <CardHeader>
-          <CardTitle>Plano de Estudo Personalizado</CardTitle>
+          <CardTitle className="text-xl tracking-tight">
+            Plano de Estudo Personalizado
+          </CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -132,41 +146,59 @@ export function StudyForm() {
 
       {loading && (
         <Card>
-          <CardContent className="flex justify-center py-10">
+          <CardContent className="flex justify-center py-12">
             <Spinner />
           </CardContent>
         </Card>
       )}
 
       {data && (
-        <Card className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <CardHeader>
-            <CardTitle className="text-2xl">{data.topic}</CardTitle>
+        <Card className="animate-in fade-in slide-in-from-bottom-2 duration-300 border-muted/60">
+          <CardHeader className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <CardTitle className="text-2xl font-semibold">
+                {data.topic}
+              </CardTitle>
+
+              {mode === "fallback" && (
+                <Badge
+                  variant="outline"
+                  className="flex items-center gap-2 border-amber-400/40 bg-amber-500/10 text-amber-600"
+                >
+                  <WifiOff className="h-4 w-4" />
+                  modo offline
+                </Badge>
+              )}
+            </div>
+
+            {warning && (
+              <p className="text-sm text-muted-foreground">{warning}</p>
+            )}
           </CardHeader>
 
-          <CardContent className="space-y-8">
-            <p className="text-muted-foreground leading-relaxed">
+          <CardContent className="space-y-10">
+            <p className="text-muted-foreground leading-relaxed text-base">
               {data.explanation}
             </p>
 
             <Separator />
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-primary font-semibold">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 font-semibold text-primary">
                 <PlayCircle className="h-5 w-5" />
                 <span>Passo 1 — Como começar</span>
               </div>
 
-              <div className="rounded-lg border p-4 bg-muted/40">
+              <div className="rounded-xl border bg-muted/40 p-5">
                 <p className="leading-relaxed">{data.howToStart}</p>
               </div>
             </div>
 
             {data.prerequisites.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 font-semibold">
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  <span>Antes de avançar, confira se você já sabe:</span>
+                  <span>Pré-requisitos</span>
                 </div>
 
                 <ul className="space-y-2">
@@ -181,7 +213,7 @@ export function StudyForm() {
             )}
 
             {data.exercises.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 font-semibold">
                   <ListTodo className="h-5 w-5 text-blue-500" />
                   <span>Exercícios práticos</span>
@@ -189,8 +221,11 @@ export function StudyForm() {
 
                 <ol className="space-y-3">
                   {data.exercises.map((ex, index) => (
-                    <li key={ex} className="flex gap-3 rounded-lg border p-4">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white text-sm font-bold">
+                    <li
+                      key={`${ex}-${index}`}
+                      className="flex gap-4 rounded-xl border p-5"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white text-sm font-bold">
                         {index + 1}
                       </span>
                       <p className="leading-relaxed">{ex}</p>
